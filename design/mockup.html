@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dash Launcher — Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0B0A;
+    --panel: #1A1917;
+    --text: #F2EEE6;
+    --muted: #A39D92;
+    --accent: #5AA9FF;
+    --bezel: #3A3732;
+    --ease: cubic-bezier(.2, .8, .2, 1);
+    --wall: radial-gradient(120% 90% at 78% 18%, #1F3346 0%, #0D141B 45%, #0B0B0A 80%);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #050505; color: var(--text); font-family: Geist, system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+
+  nav { display: flex; gap: 4px; padding: 12px 16px; align-items: center; border-bottom: 1px solid #1d1c1a; flex-wrap: wrap; }
+  nav b { font-weight: 600; margin-right: 16px; font-size: 14px; }
+  nav button { background: none; border: 1px solid transparent; color: var(--muted); font: 500 13px Geist; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+  nav button.on { color: var(--text); border-color: var(--bezel); background: var(--panel); }
+  nav span { margin-left: auto; color: var(--muted); font-size: 12px; }
+
+  .viewport { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .stage { width: 1920px; height: 1080px; flex-shrink: 0; position: relative; transform-origin: center; box-shadow: 0 0 0 1px #222; overflow: hidden; }
+  .screen { position: absolute; inset: 0; z-index: 0; display: none; background: var(--bg) var(--wall); }
+  .screen.on { display: block; }
+
+  /* ---------- Shared ---------- */
+  .clock { position: absolute; left: 96px; top: 72px; }
+  .clock .t { font-weight: 300; font-size: 120px; line-height: 120px; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+  .clock .d { font-size: 24px; line-height: 32px; letter-spacing: 0.02em; color: var(--muted); margin-top: 4px; }
+  .clock .top { display: flex; align-items: flex-end; gap: 36px; }
+  .wx { display: flex; flex-direction: column; gap: 6px; padding: 0 0 10px 36px; border-left: 1px solid var(--bezel); }
+  .wx .tr { display: flex; align-items: center; gap: 12px; font-weight: 300; font-size: 48px; line-height: 48px; letter-spacing: -0.03em; }
+  .wx svg { width: 40px; height: 40px; }
+  .wx .c { font-size: 20px; color: var(--muted); }
+  .eyebrow { font-weight: 500; font-size: 18px; line-height: 24px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+  .hint { position: absolute; right: 96px; bottom: 40px; font-size: 18px; color: var(--muted); letter-spacing: 0.02em; }
+  .hint kbd { font: 500 15px Geist; color: var(--text); border: 1px solid var(--bezel); border-radius: 6px; padding: 2px 8px; margin: 0 4px; }
+
+  .focusable { transition: transform 220ms var(--ease), box-shadow 220ms var(--ease), opacity 220ms var(--ease); }
+
+  /* ---------- Shows ---------- */
+  .shows { position: absolute; left: 96px; bottom: 264px; display: flex; flex-direction: column; gap: 16px; }
+  .show-row { display: flex; gap: 24px; }
+  .show { width: 320px; height: 180px; border-radius: 16px; position: relative; overflow: hidden; display: flex; align-items: flex-end; padding: 18px 20px; }
+  .show::after { content: ""; position: absolute; inset: 0; background: linear-gradient(transparent 40%, rgba(0,0,0,.72)); }
+  .show .meta { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 2px; }
+  .show .title { font-weight: 600; font-size: 24px; line-height: 30px; letter-spacing: -0.01em; }
+  .show .src { font-size: 16px; color: rgba(242,238,230,.75); letter-spacing: 0.04em; }
+  .show.add { background: rgba(26,25,23,.55); border: 2px dashed var(--bezel); align-items: center; justify-content: center; }
+  .show.add::after { display: none; }
+  .show.add .meta { align-items: center; color: var(--muted); font-size: 20px; gap: 8px; }
+  .show.focus { transform: scale(1.06); box-shadow: 0 0 0 4px var(--bg), 0 0 0 8px var(--accent), 0 24px 48px rgba(0,0,0,.5); }
+
+  /* ---------- Dock ---------- */
+  .dock-wrap { position: absolute; left: 0; right: 0; bottom: 92px; display: flex; justify-content: center; }
+  .dock { display: flex; align-items: center; gap: 28px; padding: 18px 32px; border-radius: 999px; background: linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.03)); backdrop-filter: blur(40px) saturate(1.4); -webkit-backdrop-filter: blur(40px) saturate(1.4); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), inset 0 0 0 1px rgba(255,255,255,.08), 0 16px 48px rgba(0,0,0,.3); }
+  .sep { width: 1px; height: 56px; background: var(--bezel); }
+  .app { position: relative; width: 88px; height: 88px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 34px; letter-spacing: -0.02em; flex-shrink: 0; }
+  .app.recent { width: 72px; height: 72px; font-size: 28px; opacity: .78; }
+  .app.util { width: 64px; height: 64px; background: rgba(242,238,230,.08); color: var(--text); }
+  .app.util svg { width: 28px; height: 28px; }
+  .app .label { position: absolute; top: calc(100% + 22px); left: 50%; transform: translate(-50%, -6px); white-space: nowrap; font-weight: 500; font-size: 22px; color: var(--text); opacity: 0; transition: opacity 180ms var(--ease), transform 220ms var(--ease); pointer-events: none; }
+  .app.focus { transform: scale(1.18); opacity: 1; box-shadow: 0 0 0 4px var(--bg), 0 0 0 8px var(--accent), 0 18px 36px rgba(0,0,0,.55); }
+  .app.focus .label { opacity: 1; transform: translate(-50%, 0) scale(.847); }
+  .app.lifted { transform: translateY(-28px) scale(1.18); box-shadow: 0 0 0 4px var(--bg), 0 0 0 8px var(--accent), 0 28px 48px rgba(0,0,0,.6); }
+
+  /* ---------- All apps ---------- */
+  .scrim { position: absolute; inset: 0; background: rgba(11,11,10,.84); backdrop-filter: blur(32px); }
+  .apps-head { position: absolute; left: 96px; right: 96px; top: 72px; display: flex; align-items: baseline; gap: 20px; }
+  .apps-head h1 { font-weight: 600; font-size: 56px; line-height: 64px; letter-spacing: -0.03em; }
+  .apps-head .count { font-size: 22px; color: var(--muted); }
+  .grid { position: absolute; left: 96px; right: 96px; top: 200px; display: flex; flex-wrap: wrap; gap: 48px 0; }
+  .cell { width: calc(100% / 8); display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .cell .app { width: 112px; height: 112px; font-size: 42px; }
+  .cell .name { font-size: 20px; color: var(--muted); white-space: nowrap; }
+  .cell.f .name { color: var(--text); font-weight: 500; }
+  .cell .pin { position: absolute; right: -2px; top: -2px; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px #121110; }
+
+  /* ---------- Menu ---------- */
+  .menu { position: absolute; width: 360px; padding: 12px; border-radius: 24px; background: var(--panel); box-shadow: inset 0 0 0 1px rgba(242,238,230,.08), 0 32px 64px rgba(0,0,0,.6); display: flex; flex-direction: column; gap: 4px; }
+  .menu .item { display: flex; align-items: center; gap: 16px; padding: 14px 18px; border-radius: 14px; font-size: 22px; font-weight: 500; }
+  .menu .item svg { width: 24px; height: 24px; flex-shrink: 0; color: var(--muted); }
+  .menu .item.f { background: var(--accent); color: #04121F; }
+  .menu .item.f svg { color: #04121F; }
+  .menu .item .k { margin-left: auto; font-size: 16px; color: var(--muted); font-weight: 400; }
+
+  /* ---------- Add show ---------- */
+  .sheet { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 120px; }
+  .sheet .copy { width: 640px; display: flex; flex-direction: column; gap: 40px; }
+  .sheet h1 { font-weight: 600; font-size: 72px; line-height: 76px; letter-spacing: -0.035em; }
+  .steps { display: flex; flex-direction: column; gap: 24px; }
+  .step { display: flex; gap: 24px; align-items: baseline; font-size: 28px; line-height: 38px; }
+  .step i { font-style: normal; width: 32px; flex-shrink: 0; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .step small { display: block; font-size: 20px; line-height: 28px; color: var(--muted); }
+  .qr-card { width: 420px; padding: 36px; border-radius: 32px; background: var(--text); display: flex; flex-direction: column; gap: 24px; align-items: center; }
+  .qr-card .url { font: 500 22px Geist; color: #1A1917; letter-spacing: 0.01em; }
+  .qr-card .live { display: flex; align-items: center; gap: 10px; font-size: 18px; color: #5C574E; }
+  .qr-card .live::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #2F9E5B; }
+
+  /* ---------- Settings ---------- */
+  .panel { position: absolute; top: 0; right: 0; bottom: 0; width: 680px; background: rgba(20,19,17,.94); backdrop-filter: blur(32px); box-shadow: -1px 0 0 rgba(242,238,230,.06); padding: 72px 64px; display: flex; flex-direction: column; gap: 48px; }
+  .panel h1 { font-weight: 600; font-size: 48px; line-height: 56px; letter-spacing: -0.03em; }
+  .group { display: flex; flex-direction: column; gap: 20px; }
+  .swatches { display: flex; gap: 20px; }
+  .sw { width: 96px; height: 96px; border-radius: 20px; position: relative; }
+  .sw.sel::after { content: ""; position: absolute; right: 8px; bottom: 8px; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--bg); }
+  .sw.f { transform: scale(1.08); box-shadow: 0 0 0 4px var(--bg), 0 0 0 8px var(--accent); }
+  .sw.img { background: rgba(242,238,230,.06); border: 2px dashed var(--bezel); display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .row { display: flex; align-items: center; justify-content: space-between; font-size: 26px; font-weight: 500; padding: 4px 0; }
+  .row .v { color: var(--muted); font-weight: 400; font-size: 22px; }
+  .seg { display: flex; padding: 4px; border-radius: 999px; background: rgba(242,238,230,.06); }
+  .seg div { padding: 8px 22px; border-radius: 999px; font-size: 20px; color: var(--muted); }
+  .seg .s { background: var(--text); color: var(--bg); font-weight: 600; }
+  .tog { width: 64px; height: 36px; border-radius: 999px; background: var(--accent); position: relative; }
+  .tog::after { content: ""; position: absolute; right: 4px; top: 4px; width: 28px; height: 28px; border-radius: 50%; background: #04121F; }
+  .tog.off { background: rgba(242,238,230,.14); }
+  .tog.off::after { right: auto; left: 4px; background: var(--muted); }
+  .rule { height: 1px; background: rgba(242,238,230,.08); }
+
+  /* ---------- PiP ---------- */
+  .pip { position: absolute; top: 48px; right: 48px; width: 512px; height: 288px; border-radius: 16px; overflow: hidden; background: linear-gradient(135deg, #24476B, #0E1A2A 60%, #3C2410); box-shadow: 0 24px 64px rgba(0,0,0,.6); }
+  .pip .bar { position: absolute; left: 16px; right: 16px; bottom: 16px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); }
+  .pip .bar::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 38%; background: #fff; border-radius: 2px; }
+  .safe { position: absolute; top: 24px; right: 24px; width: 560px; height: 336px; border: 2px dashed rgba(90,169,255,.5); border-radius: 24px; }
+  .safe span { position: absolute; left: 16px; bottom: -36px; font-size: 16px; color: var(--accent); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .apps-hint { position: absolute; left: 0; right: 0; bottom: 24px; display: flex; justify-content: center; align-items: center; gap: 6px; font: 500 15px Geist; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
+  .apps-hint svg, .apps-top svg { width: 22px; height: 22px; }
+  .apps-top { position: absolute; left: 0; right: 0; top: 20px; display: flex; justify-content: center; color: var(--muted); }
+  .apps-top svg { width: 28px; height: 28px; }
+  .screen.slide-in { animation: slideIn 340ms var(--ease); }
+  .screen.slide-out { animation: slideOut 240ms cubic-bezier(.4, 0, 1, 1) forwards; }
+  @keyframes slideIn { from { transform: translateY(100%); } }
+  @keyframes slideOut { to { transform: translateY(100%); } }
+
+  .note { position: absolute; left: 96px; bottom: 40px; font-size: 18px; color: var(--muted); max-width: 900px; }
+</style>
+</head>
+<body>
+<nav id="nav"><b>Dash</b><span>Home is live: ← → ↑ ↓ to move focus · 1–6 to switch screens · ↓ on dock opens All apps</span></nav>
+<div class="viewport" id="vp"><div class="stage" id="stage">
+
+  <!-- 1 HOME -->
+  <section class="screen" data-name="Home">
+    <div class="clock"><div class="top"><div class="t" data-clock>9:41</div><div class="wx"><div class="tr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41M15.95 12.65a4 4 0 0 0-5.93-4.13M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/></svg>54°</div><div class="c">Partly cloudy · H 61° L 47°</div></div></div><div class="d" data-date>Sunday, November 1</div></div>
+    <div class="shows"><div class="eyebrow">Pinned shows</div><div class="show-row" id="homeShows"></div></div>
+    <div class="dock-wrap"><div class="dock" id="homeDock"></div></div>
+    <div class="apps-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>All apps</div>
+  </section>
+
+  <!-- 2 ALL APPS -->
+  <section class="screen" data-name="All apps">
+    <div class="scrim"></div>
+    <div class="apps-top"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 15l-6-6-6 6"/></svg></div>
+    <div class="apps-head"><h1>All apps</h1><span class="count">24 apps · 3 hidden</span></div>
+    <div class="grid" id="grid"></div>
+    <div class="hint"><kbd>OK</kbd> open <kbd>Hold OK</kbd> options <kbd>Back</kbd> close</div>
+  </section>
+
+  <!-- 3 EDIT -->
+  <section class="screen" data-name="Edit dock">
+    <div class="clock" style="opacity:.35"><div class="top"><div class="t" data-clock>9:41</div><div class="wx"><div class="tr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41M15.95 12.65a4 4 0 0 0-5.93-4.13M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/></svg>54°</div><div class="c">Partly cloudy · H 61° L 47°</div></div></div><div class="d" data-date>Sunday, November 1</div></div>
+    <div class="shows" style="opacity:.35"><div class="eyebrow">Pinned shows</div><div class="show-row" id="editShows"></div></div>
+    <div class="dock-wrap"><div class="dock" id="editDock"></div></div>
+    <div class="menu" id="editMenu" style="left:0; bottom:248px;">
+      <div class="item f"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/></svg>Move<span class="k">◀ ▶</span></div>
+      <div class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg>Remove from dock</div>
+      <div class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c5 0 9 4.5 10 7-.4 1-1.2 2.3-2.4 3.5M6.6 6.6C4.5 8 2.9 10 2 12c1 2.5 5 7 10 7 1.8 0 3.4-.6 4.8-1.4"/></svg>Hide app</div>
+      <div class="item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>App info</div>
+    </div>
+    <div class="hint"><kbd>◀ ▶</kbd> reorder <kbd>OK</kbd> done <kbd>Back</kbd> cancel</div>
+  </section>
+
+  <!-- 4 ADD SHOW -->
+  <section class="screen" data-name="Pin a show">
+    <div class="scrim"></div>
+    <div class="sheet">
+      <div class="copy">
+        <div class="eyebrow">Pinned shows</div>
+        <h1>Pin a show from your phone</h1>
+        <div class="steps">
+          <div class="step"><i>1</i><div>Scan the code<small>Phone must be on the same Wi-Fi</small></div></div>
+          <div class="step"><i>2</i><div>Paste a share link<small>Netflix, Plex, YouTube, Max — anything with a link</small></div></div>
+          <div class="step"><i>3</i><div>It lands on your home screen<small>OK opens it straight in the app</small></div></div>
+        </div>
+      </div>
+      <div class="qr-card"><svg id="qr" width="348" height="348" viewBox="0 0 29 29" shape-rendering="crispEdges"></svg><div class="url">192.168.0.42:8642</div><div class="live">Waiting for a link…</div></div>
+    </div>
+    <div class="hint"><kbd>Back</kbd> close</div>
+  </section>
+
+  <!-- 5 SETTINGS -->
+  <section class="screen" data-name="Settings">
+    <div class="clock" style="opacity:.5"><div class="top"><div class="t" data-clock>9:41</div><div class="wx"><div class="tr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41M15.95 12.65a4 4 0 0 0-5.93-4.13M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/></svg>54°</div><div class="c">Partly cloudy · H 61° L 47°</div></div></div><div class="d" data-date>Sunday, November 1</div></div>
+    <div class="panel">
+      <h1>Launcher</h1>
+      <div class="group">
+        <div class="eyebrow">Wallpaper</div>
+        <div class="swatches">
+          <div class="sw sel" style="background:var(--wall)"></div>
+          <div class="sw f" style="background:radial-gradient(120% 90% at 78% 18%, #3B2A16, #17120C 50%, #0B0B0A 85%)"></div>
+          <div class="sw" style="background:radial-gradient(120% 90% at 78% 18%, #25331E, #10150D 50%, #0B0B0A 85%)"></div>
+          <div class="sw" style="background:#0B0B0A; box-shadow: inset 0 0 0 1px var(--bezel)"></div>
+          <div class="sw img"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div>
+        </div>
+      </div>
+      <div class="rule"></div>
+      <div class="group">
+        <div class="row">Clock<div class="seg"><div class="s">12h</div><div>24h</div></div></div>
+        <div class="row">Weather<span class="v">Set ZIP code · °F ›</span></div>
+        <div class="row">Recent apps in dock<div class="tog"></div></div>
+        <div class="row">Pinned shows row<div class="tog"></div></div>
+        <div class="row">Hidden apps<span class="v">3 ›</span></div>
+      </div>
+      <div class="rule"></div>
+      <div class="group">
+        <div class="row">Restore Google TV home<span class="v">›</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 PIP -->
+  <section class="screen" data-name="PiP-safe">
+    <div class="clock"><div class="top"><div class="t" data-clock>9:41</div><div class="wx"><div class="tr"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v2M4.93 4.93l1.41 1.41M20 12h2M19.07 4.93l-1.41 1.41M15.95 12.65a4 4 0 0 0-5.93-4.13M13 22H7a5 5 0 1 1 4.9-6H13a3 3 0 0 1 0 6Z"/></svg>54°</div><div class="c">Partly cloudy · H 61° L 47°</div></div></div><div class="d" data-date>Sunday, November 1</div></div>
+    <div class="shows"><div class="eyebrow">Pinned shows</div><div class="show-row" id="pipShows"></div></div>
+    <div class="dock-wrap"><div class="dock" id="pipDock"></div></div>
+    <div class="apps-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>All apps</div>
+    <div class="safe"><span>PiP zone — nothing lives here</span></div>
+    <div class="pip"><div class="bar"></div></div>
+  </section>
+
+</div></div>
+
+<script>
+const icons = {
+  input: '<path d="M3 6h18v11H3zM8 21h8M12 17v4"/>',
+  wifi: '<path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  grid: '<circle cx="6" cy="6" r="1.6"/><circle cx="12" cy="6" r="1.6"/><circle cx="18" cy="6" r="1.6"/><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/><circle cx="6" cy="18" r="1.6"/><circle cx="12" cy="18" r="1.6"/><circle cx="18" cy="18" r="1.6"/>',
+};
+const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${icons[k]}</svg>`;
+
+// Placeholder monograms — the real build uses each app's icon/banner.
+const favs = [
+  ['Netflix', 'N', '#E50914', '#fff'], ['YouTube', 'Y', '#F2EEE6', '#E62117'], ['Plex', 'P', '#1F1F1F', '#E5A00D'],
+  ['Max', 'M', '#0024F5', '#fff'], ['Spotify', 'S', '#1ED760', '#000'], ['Prime Video', 'p', '#0F79AF', '#fff'],
+];
+const recents = [['Disney+', 'D', '#0E1B4D', '#fff'], ['Twitch', 'T', '#9146FF', '#fff']];
+const utils = [['Inputs', 'input'], ['Wi-Fi', 'wifi'], ['Settings', 'gear']];
+const shows = [
+  ['Severance', 'Apple TV', 'linear-gradient(135deg,#2B4C5E,#0F1C24)'],
+  ['The Bear', 'Disney+', 'linear-gradient(135deg,#6B3A1F,#1C0F08)'],
+  ['Planet Earth III', 'Max', 'linear-gradient(135deg,#2F5A34,#0C1A0E)'],
+];
+
+function dock(el, { focus = -1, lifted = -1 } = {}) {
+  let i = 0, h = '';
+  const cls = n => (n === focus ? ' focus' : '') + (n === lifted ? ' lifted' : '');
+  for (const [n, l, bg, fg] of favs) h += `<div class="app focusable${cls(i)}" data-i="${i++}" style="background:${bg};color:${fg}">${l}<span class="label">${n}</span></div>`;
+  h += '<div class="sep"></div>';
+  for (const [n, l, bg, fg] of recents) h += `<div class="app recent focusable${cls(i)}" data-i="${i++}" style="background:${bg};color:${fg}">${l}<span class="label">${n} · recent</span></div>`;
+  h += '<div class="sep"></div>';
+  for (const [n, k] of utils) h += `<div class="app util focusable${cls(i)}" data-i="${i++}">${svg(k)}<span class="label">${n}</span></div>`;
+  el.innerHTML = h;
+}
+function showRow(el, focus = -1) {
+  el.innerHTML = shows.map(([t, s, bg], i) =>
+    `<div class="show focusable${i === focus ? ' focus' : ''}" style="background:${bg}"><div class="meta"><div class="title">${t}</div><div class="src">${s}</div></div></div>`).join('')
+    + `<div class="show add focusable${focus === shows.length ? ' focus' : ''}"><div class="meta">${svg('grid').replace(icons.grid, '<path d="M12 5v14M5 12h14"/>').replace('<svg', '<svg width="36" height="36"')}Pin a show</div></div>`;
+}
+
+// Home: live focus model (row 0 = shows, row 1 = dock)
+const homeDock = document.getElementById('homeDock'), homeShows = document.getElementById('homeShows');
+let row = 1, col = 0;
+dock(homeDock); showRow(homeShows);
+const dockCount = favs.length + recents.length + utils.length;
+function paint() {
+  homeDock.querySelectorAll('.app').forEach((a, i) => a.classList.toggle('focus', row === 1 && i === col));
+  homeShows.querySelectorAll('.show').forEach((s, i) => s.classList.toggle('focus', row === 0 && i === col));
+}
+paint();
+
+dock(document.getElementById('editDock'), { lifted: 2 });
+showRow(document.getElementById('editShows'));
+dock(document.getElementById('pipDock'), { focus: 0 });
+showRow(document.getElementById('pipShows'));
+
+// All apps grid
+const all = [...favs, ...recents,
+  ['Apple TV', 'a', '#111', '#fff'], ['Paramount+', 'P', '#0064FF', '#fff'], ['Peacock', 'P', '#000', '#F2EEE6'], ['Hulu', 'h', '#1CE783', '#000'],
+  ['Crunchyroll', 'C', '#F47521', '#fff'], ['Kodi', 'K', '#17B2E7', '#fff'], ['VLC', 'V', '#FF8800', '#fff'], ['Google Play', 'G', '#F2EEE6', '#1A1917'],
+  ['Files', 'F', '#3A3732', '#F2EEE6'], ['Chrome', 'C', '#F2EEE6', '#1A73E8'], ['Steam Link', 'S', '#1B2838', '#fff'], ['Pluto TV', 'P', '#FFF200', '#000'],
+  ['Tubi', 't', '#FA382F', '#fff'], ['SmartTube', 'S', '#C4302B', '#fff'], ['Moonlight', 'M', '#2D2D2D', '#fff'], ['Settings', 'S', '#3A3732', '#F2EEE6']];
+document.getElementById('grid').innerHTML = all.map(([n, l, bg, fg], i) =>
+  `<div class="cell${i === 9 ? ' f' : ''}"><div class="app${i === 9 ? ' focus' : ''}" style="background:${bg};color:${fg}">${l}${i < favs.length ? '<span class="pin"></span>' : ''}</div><div class="name">${n}</div></div>`).join('');
+
+// Pseudo QR (visual stand-in only)
+(function qr() {
+  const n = 29, el = document.getElementById('qr'); let s = '', seed = 7;
+  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const finder = (x, y) => `<rect x="${x}" y="${y}" width="7" height="7" fill="#1A1917"/><rect x="${x+1}" y="${y+1}" width="5" height="5" fill="#F2EEE6"/><rect x="${x+2}" y="${y+2}" width="3" height="3" fill="#1A1917"/>`;
+  const inF = (x, y) => (x < 8 && y < 8) || (x > n - 9 && y < 8) || (x < 8 && y > n - 9);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) if (!inF(x, y) && rnd() > .52) s += `<rect x="${x}" y="${y}" width="1" height="1" fill="#1A1917"/>`;
+  el.innerHTML = s + finder(0, 0) + finder(n - 7, 0) + finder(0, n - 7);
+})();
+
+// Clock
+function tick() {
+  const d = new Date();
+  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(/\s?[AP]M/i, '');
+  const date = d.toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  document.querySelectorAll('[data-clock]').forEach(e => e.textContent = t);
+  document.querySelectorAll('[data-date]').forEach(e => e.textContent = date);
+}
+tick(); setInterval(tick, 10000);
+
+// Screens + nav
+const screens = [...document.querySelectorAll('.screen')], nav = document.getElementById('nav');
+screens.forEach((s, i) => {
+  const b = document.createElement('button'); b.textContent = `${i + 1} ${s.dataset.name}`;
+  b.onclick = () => { appsOpen = false; screens[1].classList.remove('slide-in', 'slide-out'); show(i); }; nav.insertBefore(b, nav.querySelector('span'));
+});
+function show(i) {
+  screens.forEach((s, j) => s.classList.toggle('on', i === j));
+  nav.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', i === j));
+  try { localStorage.setItem('dash-screen', i); } catch {}
+  if (i === 2) placeMenu();
+}
+function placeMenu() {
+  const a = document.querySelector('#editDock .lifted'), st = document.getElementById('stage');
+  const r = a.getBoundingClientRect(), sr = st.getBoundingClientRect(), k = sr.width / 1920;
+  document.getElementById('editMenu').style.left = ((r.left + r.width / 2 - sr.left) / k - 180) + 'px';
+}
+let start = 0; try { start = +localStorage.getItem('dash-screen') || 0; } catch {}
+
+// Fit stage
+function fit() {
+  const vp = document.getElementById('vp'), k = Math.min(vp.clientWidth / 1920, vp.clientHeight / 1080) * 0.96;
+  document.getElementById('stage').style.transform = `scale(${k})`;
+}
+addEventListener('resize', () => { fit(); if (screens[2].classList.contains('on')) placeMenu(); });
+fit(); show(start);
+
+// All apps slides up over Home (Home stays rendered underneath)
+let appsOpen = false;
+function openApps() {
+  appsOpen = true;
+  const a = screens[1];
+  a.classList.remove('slide-out'); a.classList.add('on', 'slide-in');
+}
+function closeApps() {
+  appsOpen = false;
+  const a = screens[1];
+  a.classList.remove('slide-in'); a.classList.add('slide-out');
+  a.addEventListener('animationend', () => a.classList.remove('on', 'slide-out'), { once: true });
+}
+
+addEventListener('keydown', e => {
+  if (/^[1-6]$/.test(e.key)) { appsOpen = false; screens[1].classList.remove('slide-in', 'slide-out'); return show(+e.key - 1); }
+  if (appsOpen) {
+    if (['ArrowUp', 'Escape', 'Backspace'].includes(e.key)) { e.preventDefault(); closeApps(); }
+    return;
+  }
+  if (!screens[0].classList.contains('on')) return;
+  const max = row === 1 ? dockCount - 1 : shows.length;
+  if (e.key === 'ArrowRight') col = Math.min(max, col + 1);
+  else if (e.key === 'ArrowLeft') col = Math.max(0, col - 1);
+  else if (e.key === 'ArrowUp' && row === 1) { row = 0; col = Math.min(col, shows.length); }
+  else if (e.key === 'ArrowDown' && row === 0) { row = 1; col = Math.min(col, favs.length - 1); }
+  else if (e.key === 'ArrowDown' && row === 1) { e.preventDefault(); return openApps(); }
+  else return;
+  e.preventDefault(); paint();
+});
+</script>
+</body>
+</html>

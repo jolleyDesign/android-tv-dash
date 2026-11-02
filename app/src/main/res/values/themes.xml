@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.Dash" parent="android:Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorBackground">@color/bg</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowShowWallpaper">false</item>
+    </style>
+</resources>

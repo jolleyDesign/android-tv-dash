@@ -2,6 +2,12 @@
 
 A fast, minimal home screen for Google TV (built for the Google TV Streamer 4K).
 
+![Dash home screen: clock and weather, pinned shows, and the glass dock](docs/screenshots/home.jpg)
+
+| All apps + options | Settings | Pin from your phone |
+|---|---|---|
+| ![All apps with the hold-OK options menu](docs/screenshots/allapps.jpg) | ![Launcher settings panel](docs/screenshots/settings.jpg) | ![QR screen for pinning a show from a phone](docs/screenshots/phone.jpg) |
+
 - Kotlin + Jetpack Compose (foundation/ui only, no Material), single activity, ~2 MB release APK
 - Glass dock with favorites, recent apps, and shortcuts; **↓ on the dock** slides up All apps
 - Pinned shows (deep links), wallpaper, and weather ZIP are sent **from your phone** by scanning a QR code;

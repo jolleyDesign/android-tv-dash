@@ -76,4 +76,7 @@ class MainActivity : ComponentActivity(), Host {
     }
 
     override fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+    // The result needs no callback: the dialog pauses us, and onResume re-reads every permission.
+    override fun requestPermission(permission: String) = requestPermissions(arrayOf(permission), 1)
 }

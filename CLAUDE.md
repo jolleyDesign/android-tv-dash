@@ -43,7 +43,8 @@ The Streamer connects over wireless adb (re-pair if needed — see `docs/DEVICE.
   (a HOME activity must never finish).
 - `ui/Root.kt` — overrides `LocalDensity` so **1.dp = 1 design pixel on a 1920×1080 canvas**, scaled to the
   screen. Design measurements from the mockups carry over 1:1.
-- `ui/Home.kt` — clock + weather, pinned shows row, glass dock, "All apps" hint. `ui/Overlays.kt` — All apps
+- `ui/Home.kt` — layout of Home, pinned shows row, glass dock, "All apps" hint. `ui/Clocks.kt` — the five clock
+  faces. `ui/Widgets.kt` — widget row + cards (weather, now playing, sun & air, world clocks, connections). `ui/Overlays.kt` — All apps
   sheet, options menu, settings panel, phone/QR screen, notices. `ui/Theme.kt` — color tokens, Geist font,
   wallpapers, focus ring, Lucide icons as `ImageVector`s.
 - `ui/Motion.kt` — one shared ambient clock (`LocalMotion`) read only in draw phase: wallpaper drift,
@@ -52,6 +53,7 @@ The Streamer connects over wireless adb (re-pair if needed — see `docs/DEVICE.
 - `data/Apps.kt` — app list (LEANBACK_LAUNCHER first, then LAUNCHER) + circular icon rendering (adaptive layers,
   legacy icons on a disc, banner center-crop fallback). `data/Store.kt` — prefs. `data/Net.kt` — Open-Meteo,
   usage stats, show-link handler resolution + og:title/og:image scraping, image decode helpers, LAN IP.
+  `data/Live.kt` — media sessions (via the `MediaListener` notification listener) and network/Bluetooth state.
 - `net/PinServer.kt` — LAN-only HTTP server for the phone companion page. **Runs only while the QR screen is
   open**; every request needs the random token in the QR URL. Port 8642.
 

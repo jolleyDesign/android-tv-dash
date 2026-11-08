@@ -125,13 +125,16 @@ fun GraphicsLayerScope.drift(m: Motion) {
 // ---------- Focus ----------
 
 /**
- * Focus ring outline at [r], 6dp outside the element. [b] (0..1) is the breath: the ring eases
- * out by 2dp and a soft halo fades in around it.
+ * Focus ring outline at [r]. Tiles get a 6dp gap; app circles get none — the ring hugs the icon.
+ * [b] (0..1) is the breath: a soft halo fades in around the ring, and on tiles the ring eases out 2dp.
  */
 fun DrawScope.drawRing(r: Rect, circle: Boolean, corner: Dp, a: Float, b: Float) {
     if (a <= 0f) return
-    val stroke = 4.dp.toPx()
-    val gap = (6f + 2f * b).dp.toPx()
+    // Thin and partly transparent: on a dark screen a full-strength accent ring shouts.
+    val stroke = 2.5.dp.toPx()
+    val alpha = a * .7f
+    // Half a pixel of overlap so antialiasing never leaves a hairline between icon and ring.
+    val gap = if (circle) stroke / 2 - .5f else (6f + 2f * b).dp.toPx()
     fun outline(e: Float, w: Float, alpha: Float) {
         if (circle) {
             drawCircle(C.Accent, radius = r.minDimension / 2 + e, center = r.center, alpha = alpha, style = Stroke(w))
@@ -143,14 +146,14 @@ fun DrawScope.drawRing(r: Rect, circle: Boolean, corner: Dp, a: Float, b: Float)
             )
         }
     }
-    outline(gap, stroke, a)
+    outline(gap, stroke, alpha)
     if (b > .01f) {
         val w = 2.dp.toPx()
-        halo.forEachIndexed { k, h -> outline(gap + stroke / 2 + w * (k + .5f), w, a * b * h) }
+        halo.forEachIndexed { k, h -> outline(gap + stroke / 2 + w * (k + .5f), w, alpha * b * h) }
     }
 }
 
-private val halo = floatArrayOf(.2f, .11f, .04f)
+private val halo = floatArrayOf(.1f, .05f, .02f)
 
 /** A soft diagonal glint that sweeps across an element once, shortly after it gains focus. */
 @Composable

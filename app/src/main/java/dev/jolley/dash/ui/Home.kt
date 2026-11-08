@@ -54,6 +54,7 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -61,6 +62,7 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.findRootCoordinates
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
@@ -76,12 +78,9 @@ import dev.jolley.dash.Overlay
 import dev.jolley.dash.Util
 import dev.jolley.dash.Zone
 import dev.jolley.dash.data.PinnedShow
-import dev.jolley.dash.data.WeatherApi
-import kotlinx.coroutines.delay
 import kotlin.math.abs
+import kotlin.math.min
 import kotlin.math.roundToInt
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
 
 @Composable
 fun Modifier.track(c: Controller, key: String): Modifier {
@@ -112,12 +111,44 @@ fun Wallpaper(c: Controller) {
     }
 }
 
+private const val CLOCK_GROW = 1.4f
+private val CLOCK_MAX_W = 1150.dp
+private val CLOCK_MAX_W_CENTERED = 860.dp
+
 @Composable
 fun Home(c: Controller) {
     val dim by animateFloatAsState(if (c.overlay is Overlay.Settings) .5f else 1f, tween(300), label = "dim")
     val rise = rememberRise(c)
     Box(Modifier.fillMaxSize()) {
-        Clock(c, Modifier.absoluteOffset(96.dp, 72.dp).graphicsLayer { rise(0f, 14.dp); alpha *= dim })
+        // With only one row (or none) below, the clock takes the freed space. Capped by width so wide
+        // faces stay clear of the PiP corner.
+        val rows = (if (c.widgets.isNotEmpty()) 1 else 0) + (if (c.showsVisible) 1 else 0)
+        var clockW by remember { mutableIntStateOf(0) }
+        // Centered, the right edge must stay left of the PiP corner (~x 1392), so the cap is tighter.
+        val maxW = with(LocalDensity.current) { (if (c.prefs.centered) CLOCK_MAX_W_CENTERED else CLOCK_MAX_W).toPx() }
+        val target = if (rows >= 2 || clockW == 0) 1f else min(CLOCK_GROW, maxW / clockW).coerceAtLeast(1f)
+        val grow by animateFloatAsState(target, tween(420, easing = Ease), label = "clockGrow")
+        val centered = c.prefs.centered
+        Box(
+            Modifier.absoluteOffset(y = 72.dp).fillMaxWidth().padding(horizontal = 96.dp),
+            contentAlignment = if (centered) Alignment.TopCenter else Alignment.TopStart,
+        ) {
+            Clock(
+                c,
+                Modifier
+                    .onSizeChanged { clockW = it.width }
+                    .graphicsLayer {
+                        rise(0f, 14.dp)
+                        alpha *= dim
+                        transformOrigin = TransformOrigin(if (centered) .5f else 0f, 0f)
+                        scaleX = grow
+                        scaleY = grow
+                    },
+            )
+        }
+        // Without the shows row, widgets drop into its place just above the dock.
+        val widgetsY by animateDpAsState(if (c.showsVisible) WIDGETS_Y else WIDGETS_LOW_Y, tween(380, easing = Ease), label = "widgetsY")
+        if (c.widgets.isNotEmpty()) WidgetsRow(c, Modifier.absoluteOffset(y = widgetsY).graphicsLayer { rise(.05f, 20.dp) })
         if (c.showsVisible) ShowsRow(c, Modifier.absoluteOffset(y = 596.dp).graphicsLayer { rise(.1f, 28.dp) })
         Dock(c, Modifier.absoluteOffset(y = 864.dp).graphicsLayer { rise(.2f, 40.dp) })
         Row(
@@ -184,48 +215,6 @@ fun KeyHints(items: List<Pair<String, String>>, modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-private fun rememberNow(): LocalDateTime {
-    var now by remember { mutableStateOf(LocalDateTime.now()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = LocalDateTime.now()
-            delay(60_000 - System.currentTimeMillis() % 60_000 + 50)
-        }
-    }
-    return now
-}
-
-private val dateFmt = DateTimeFormatter.ofPattern("EEEE, MMMM d")
-private val time12 = DateTimeFormatter.ofPattern("h:mm")
-private val time24 = DateTimeFormatter.ofPattern("H:mm")
-
-@Composable
-fun Clock(c: Controller, modifier: Modifier = Modifier) {
-    val now = rememberNow()
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(36.dp)) {
-            RollingText(now.format(if (c.prefs.use24h) time24 else time12), wall(120, 300, tracking = -4.8f, lineHeight = 120))
-            val w = c.weather
-            if (w != null && c.place != null) {
-                Column(
-                    Modifier
-                        .drawBehind { drawLine(C.Bezel, androidx.compose.ui.geometry.Offset(0f, 0f), androidx.compose.ui.geometry.Offset(0f, size.height), 1.dp.toPx()) }
-                        .padding(start = 36.dp, bottom = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        WeatherIcon(w.code, w.isDay, 40.dp, C.Text)
-                        BasicText("${w.temp}°", style = wall(48, 300, tracking = -1.4f, lineHeight = 48))
-                    }
-                    BasicText("${WeatherApi.describe(w.code)} · H ${w.hi}° L ${w.lo}°", style = wall(20, color = C.Muted))
-                }
-            }
-        }
-        BasicText(now.format(dateFmt), style = wall(24, color = C.Muted, tracking = .5f))
-    }
-}
-
 // ---------- Pinned shows ----------
 
 private val tileGradients = listOf(
@@ -249,11 +238,17 @@ fun ShowsRow(c: Controller, modifier: Modifier = Modifier) {
     var origin by remember { mutableStateOf(Offset.Zero) }
     val report: ((Int, Rect) -> Unit)? = if (glide) { i, r -> tiles[i] = r } else null
     Box(modifier.fillMaxWidth().onGloballyPositioned { origin = it.positionInRoot() }) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            BasicText("Pinned shows", Modifier.padding(start = 96.dp), style = Eyebrow.copy(shadow = WallShadow))
+        val centered = c.prefs.centered
+        Column(
+            Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = if (centered) Alignment.CenterHorizontally else Alignment.Start,
+        ) {
+            BasicText("Pinned shows", Modifier.padding(horizontal = 96.dp), style = Eyebrow.copy(shadow = WallShadowTight))
             LazyRow(
+                Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 96.dp),
-                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                horizontalArrangement = Arrangement.spacedBy(24.dp, if (centered) Alignment.CenterHorizontally else Alignment.Start),
             ) {
                 itemsIndexed(c.shows, key = { _, s -> s.id }) { i, s ->
                     ShowTile(c, s, i, focused = active && c.showIndex == i, lifted = moving && c.showIndex == i, report)
@@ -355,8 +350,9 @@ fun Dock(c: Controller, modifier: Modifier = Modifier) {
                 Box(
                     Modifier
                         .matchParentSize()
-                        .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = .12f), Color.White.copy(alpha = .03f))))
-                        .border(1.dp, Brush.verticalGradient(listOf(Color.White.copy(alpha = .25f), Color.White.copy(alpha = .05f))), Pill),
+                        // Same frosted-dark treatment as the widget cards.
+                        .background(Color.Black.copy(alpha = if (wall != null) .58f else .7f))
+                        .border(1.dp, Color.White.copy(alpha = .08f), Pill),
                 )
             }
             Row(
@@ -381,7 +377,7 @@ fun Dock(c: Controller, modifier: Modifier = Modifier) {
  * screen and drifting with it. Pre-blurred so the drift never re-runs a blur per frame.
  */
 @Composable
-private fun BlurredBackdrop(blur: ImageBitmap, origin: IntOffset) {
+fun BlurredBackdrop(blur: ImageBitmap, origin: IntOffset) {
     val motion = LocalMotion.current
     Image(
         blur, null,
@@ -445,7 +441,7 @@ private fun DockItem(c: Controller, e: DockEntry, i: Int, focused: Boolean, lift
                 is DockEntry.Shortcut -> {
                     Box(Modifier.matchParentSize().background(Color.White.copy(alpha = .08f)))
                     Glyph(
-                        when (e.util) { Util.Inputs -> Ic.Tv; Util.WiFi -> Ic.Wifi; Util.Settings -> Ic.Gear },
+                        when (e.util) { Util.Inputs -> Ic.Tv; Util.WiFi -> Ic.Wifi; Util.Bluetooth -> Ic.Bluetooth; Util.Settings -> Ic.Gear },
                         28.dp, C.Text,
                     )
                 }

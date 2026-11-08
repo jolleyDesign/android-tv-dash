@@ -27,6 +27,24 @@ Built, tested on the Google TV emulator (API 34), installed on the Streamer, and
   digits that roll on the minute, and the clock/shows/dock rising back in when you return from an app.
 - Settings rows tightened slightly so the new row fits.
 
+## Done (v0.4 widgets, emulator only — not yet on the Streamer)
+
+Tested on the phone emulator forced to 1920×1080 (the Google TV AVD and its system image are gone from this
+Mac; re-download `system-images;android-34;google-tv;arm64-v8a` to recreate `Dash_GoogleTV_1080p`).
+
+- **Widgets row** between the clock and pinned shows, or in the shows' place when that row is off (frosted dark cards,
+  scrolls sideways, full width with a fade at the screen edge). ↑ from shows/dock enters it; hold OK → Move / Remove; Settings → Widgets toggles each one.
+  - Weather: current + feels-like/wind/humidity/UV/sun, 10-hour strip, 5-day ranges.
+  - Now playing: active media session (art, title, app), OK = play/pause, menu → Open app.
+  - Sun & air: sunrise/sunset arc, daylight, US AQI (Open-Meteo air-quality API).
+  - World clocks: up to 3 cities (Settings → Widgets → World clock cities, or OK on the card).
+  - Connections: Wi-Fi band/signal/IP/link speed, online check, connected Bluetooth devices + battery.
+- **Clock faces** (Settings → Clock face, ◀ ▶): Thin (default), Bold, Analog (sweeping accent second hand when
+  motion is on), Stacked (minutes in accent blue), Words.
+- **Bluetooth in dock** toggle (off by default) → Android Bluetooth settings.
+- App focus ring now sits flush on the icon (no gap); tiles keep the 6dp gap.
+- Settings panel scrolls; APK 2.9 MB.
+
 ## Verified on the real Streamer
 
 - Installs and runs at 1080p UI; default dock built from installed apps; Recents working (usage access granted).
@@ -42,6 +60,9 @@ Built, tested on the Google TV emulator (API 34), installed on the Streamer, and
       "Background playback" setting, play a video, press Home. Then check with
       `adb shell dumpsys activity activities | grep -i pinned` that it's in PiP and Dash stays usable.
 
+- [ ] **v0.4**: on the TV; media access granted 2026-11-08. With shows on, check a PiP window over the right end of the widget row is acceptable. Now Playing with real apps (Spotify/SmartTube/YouTube — art + play/pause), connected-device
+      detection (`isConnected`/battery are non-SDK reflection; verify the remote shows up), Wi-Fi band/signal,
+      `ACTION_BLUETOOTH_SETTINGS` opens Remotes & Accessories, frame pacing with 5 glass cards + analog sweep.
 - [ ] **v0.3 motion smoothness** — emulator uses SwiftShader so frame timings there are meaningless. Check
       `adb shell dumpsys gfxinfo dev.jolley.dash` on Home after a reset; tune drift speed/breath strength by feel.
 
@@ -57,4 +78,4 @@ Built, tested on the Google TV emulator (API 34), installed on the Streamer, and
 3. **Backup/restore** via the phone page (dock, shows, hidden, prefs as JSON) — sideloaded installs are fragile.
 4. Polish: lighter muted text on photo wallpapers, reorder in All apps, optional idle "quiet" mode.
 
-Skipped on purpose: auto "continue watching" rows (Google restricts the data), folders/widgets, own screensaver.
+Skipped on purpose: auto "continue watching" rows (Google restricts the data), folders, own screensaver.

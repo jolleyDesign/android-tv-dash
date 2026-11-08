@@ -23,6 +23,14 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import dev.jolley.dash.data.AppEntry
 import dev.jolley.dash.data.AppRepository
+import dev.jolley.dash.data.BtState
+import dev.jolley.dash.data.Cities
+import dev.jolley.dash.data.ClockFace
+import dev.jolley.dash.data.Connections
+import dev.jolley.dash.data.MAX_CITIES
+import dev.jolley.dash.data.Media
+import dev.jolley.dash.data.NetInfo
+import dev.jolley.dash.data.NowPlaying
 import dev.jolley.dash.data.PinnedShow
 import dev.jolley.dash.data.Prefs
 import dev.jolley.dash.data.Shows
@@ -30,6 +38,7 @@ import dev.jolley.dash.data.Store
 import dev.jolley.dash.data.Usage
 import dev.jolley.dash.data.Wall
 import dev.jolley.dash.data.WeatherApi
+import dev.jolley.dash.data.WidgetKind
 import dev.jolley.dash.data.blurredCopy
 import dev.jolley.dash.data.lanAddress
 import dev.jolley.dash.data.saveWallpaper
@@ -47,15 +56,17 @@ import java.util.UUID
 interface Host {
     fun start(intent: Intent, from: Rect?): Boolean
     fun toast(msg: String)
+    fun requestPermission(permission: String)
 }
 
-enum class Zone { Shows, Dock }
-enum class Util(val label: String) { Inputs("Inputs"), WiFi("Wi-Fi"), Settings("Settings") }
+enum class Zone { Widgets, Shows, Dock }
+enum class Util(val label: String) { Inputs("Inputs"), WiFi("Wi-Fi"), Bluetooth("Bluetooth"), Settings("Settings") }
 enum class PhoneMode { Pin, Wallpaper }
-enum class SettingItem { Clock, Weather, Recents, Shows, Motion, Hidden, Android, Restore }
+enum class SettingItem { Clock, Face, ClockWeather, Layout, Weather, Widgets, Recents, Shows, Bluetooth, Motion, Hidden, Android, Restore }
 enum class Action(val label: String) {
     Move("Move"), AddToDock("Add to dock"), RemoveFromDock("Remove from dock"),
     Hide("Hide app"), Info("App info"), MoveShow("Move"), RemoveShow("Remove show"),
+    MoveWidget("Move"), RemoveWidget("Remove widget"), OpenApp("Open app"), BtSettings("Bluetooth settings"),
 }
 
 sealed interface DockEntry {
@@ -67,6 +78,7 @@ sealed interface DockEntry {
 sealed interface MenuTarget {
     data class App(val app: AppEntry, val anchorKey: String) : MenuTarget
     data class Show(val show: PinnedShow, val anchorKey: String) : MenuTarget
+    data class Widget(val kind: WidgetKind, val anchorKey: String) : MenuTarget
 }
 
 sealed interface Overlay {
@@ -74,13 +86,18 @@ sealed interface Overlay {
     data class Apps(val index: Int) : Overlay
     data class Menu(val target: MenuTarget, val actions: List<Action>, val index: Int, val under: Overlay) : Overlay
     data class Move(val zone: Zone, val index: Int) : Overlay
-    /** [zip] non-null = the ZIP keypad is open, with [key] focused (3×4 grid: 1–9, ⌫, 0, ✓). */
+    /**
+     * [zip] non-null = the ZIP keypad is open, with [key] focused (3×4 grid: 1–9, ⌫, 0, ✓).
+     * [widgetsIndex] / [cityIndex] non-null = the Widgets page / the world-clock city picker (on top of it).
+     */
     data class Settings(
         val row: Int,
         val col: Int = 0,
         val hiddenIndex: Int? = null,
         val zip: String? = null,
         val key: Int = 0,
+        val widgetsIndex: Int? = null,
+        val cityIndex: Int? = null,
     ) : Overlay
     data class Phone(val mode: PhoneMode, val returnTo: Overlay) : Overlay
     data class Notice(val title: String, val body: String, val returnTo: Overlay) : Overlay
@@ -90,6 +107,8 @@ const val GRID_COLUMNS = 8
 const val WALL_COLS = 5
 val WALL_ROWS = (Wall.entries.size + WALL_COLS - 1) / WALL_COLS
 val SETTINGS_ROWS = WALL_ROWS + SettingItem.entries.size
+/** Widgets page: one toggle per kind, then "World clock cities". */
+val WIDGET_ROWS = WidgetKind.entries.size + 1
 const val ZIP_KEY_DELETE = 9
 const val ZIP_KEY_DONE = 11
 const val IDLE_MS = 30_000L
@@ -119,10 +138,19 @@ class Controller(private val app: Application) {
     var zone by mutableStateOf(Zone.Dock); private set
     var dockIndex by mutableIntStateOf(0); private set
     var showIndex by mutableIntStateOf(0); private set
+    var widgetIndex by mutableIntStateOf(0); private set
     var overlay by mutableStateOf<Overlay>(Overlay.None); private set
     var phoneUrl by mutableStateOf<String?>(null); private set
     var phoneStatus by mutableStateOf<String?>(null); private set
     var zipStatus by mutableStateOf<String?>(null); private set
+
+    var nowPlaying by mutableStateOf<NowPlaying?>(null); private set
+    var mediaAccess by mutableStateOf(false); private set
+    var net by mutableStateOf<NetInfo?>(null); private set
+    var bt by mutableStateOf<BtState>(BtState.Unavailable); private set
+    private val media = Media(app) { nowPlaying = it }
+    private val connections = Connections(app, { net = it }, { bt = it })
+    private var btAsked = false
 
     /** False after [IDLE_MS] without input; idle-only motion (the breathing ring) settles. */
     var lively by mutableStateOf(true); private set
@@ -153,11 +181,13 @@ class Controller(private val app: Application) {
             rec.forEach { add(DockEntry.Recent(it)) }
             if (inputsIntent != null) add(DockEntry.Shortcut(Util.Inputs))
             add(DockEntry.Shortcut(Util.WiFi))
+            if (prefs.btInDock) add(DockEntry.Shortcut(Util.Bluetooth))
             add(DockEntry.Shortcut(Util.Settings))
         }
     }
 
     val showsVisible get() = prefs.showShows
+    val widgets: List<WidgetKind> get() = prefs.widgets
 
     init {
         refreshApps()
@@ -177,7 +207,13 @@ class Controller(private val app: Application) {
     fun onResume() {
         refreshRecents()
         startWeatherLoop()
+        refreshLive()
         poke()
+    }
+
+    private fun refreshLive() {
+        if (WidgetKind.NowPlaying in widgets) mediaAccess = media.start()
+        if (WidgetKind.Connections in widgets) connections.start()
     }
 
     fun onStop() {
@@ -238,7 +274,8 @@ class Controller(private val app: Application) {
         weatherJob = scope.launch {
             while (true) {
                 val p = place
-                val stale = weather?.let { System.currentTimeMillis() - it.fetchedAt > 30 * 60_000 } ?: true
+                // Caches from before the forecast widget have no hourly data; refetch those right away.
+                val stale = weather?.let { System.currentTimeMillis() - it.fetchedAt > 30 * 60_000 || it.hours.isEmpty() } ?: true
                 if (p != null && stale) {
                     runCatching { withContext(Dispatchers.IO) { WeatherApi.forecast(p) } }.onSuccess {
                         weather = it
@@ -376,13 +413,35 @@ class Controller(private val app: Application) {
     private fun runShortcut(u: Util) {
         when (u) {
             Util.Inputs -> inputsIntent?.let { host?.start(Intent(it).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), null) }
-            Util.WiFi -> host?.start(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), null)
+            Util.WiFi -> openSettings(Settings.ACTION_WIFI_SETTINGS)
+            Util.Bluetooth -> openBluetooth()
             Util.Settings -> {
                 loadWallThumbs()
                 val i = Wall.entries.indexOf(prefs.wall).coerceAtLeast(0)
                 overlay = Overlay.Settings(i / WALL_COLS, col = i % WALL_COLS)
             }
         }
+    }
+
+    private fun openSettings(action: String) {
+        val h = host ?: return
+        if (!h.start(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), null)) {
+            h.start(Intent(Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), null)
+        }
+    }
+
+    /** Google TV has no handler for ACTION_BLUETOOTH_SETTINGS; its "Remotes & Accessories" page uses its own action. */
+    private fun openBluetooth() {
+        val h = host ?: return
+        val tv = Intent("com.android.tv.settings.CONNECTED_DEVICES").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        if (!h.start(tv, null)) openSettings(Settings.ACTION_BLUETOOTH_SETTINGS)
+    }
+
+    private fun openPackage(pkg: String) {
+        apps.firstOrNull { it.pkg == pkg }?.let { launch(it, "widget:$widgetIndex"); return }
+        val pm = app.packageManager
+        val i = pm.getLeanbackLaunchIntentForPackage(pkg) ?: pm.getLaunchIntentForPackage(pkg) ?: return
+        host?.start(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), bounds["widget:$widgetIndex"])
     }
 
     @Suppress("DEPRECATION")
@@ -451,13 +510,28 @@ class Controller(private val app: Application) {
                 }
                 else -> Unit
             }
+            is MenuTarget.Widget -> when (action) {
+                Action.MoveWidget -> overlay = Overlay.Move(Zone.Widgets, widgets.indexOf(t.kind))
+                Action.RemoveWidget -> setWidgets(widgets - t.kind)
+                Action.OpenApp -> media.pkg?.let(::openPackage)
+                Action.BtSettings -> openBluetooth()
+                else -> Unit
+            }
         }
+        clampFocus()
+    }
+
+    private fun setWidgets(list: List<WidgetKind>) {
+        updatePrefs(prefs.copy(widgets = list))
+        refreshLive()
         clampFocus()
     }
 
     private fun clampFocus() {
         dockIndex = dockIndex.coerceIn(0, (dockEntries.size - 1).coerceAtLeast(0))
         showIndex = showIndex.coerceIn(0, shows.size)
+        widgetIndex = widgetIndex.coerceIn(0, (widgets.size - 1).coerceAtLeast(0))
+        if (zone == Zone.Widgets && widgets.isEmpty() || zone == Zone.Shows && !showsVisible) zone = Zone.Dock
         (overlay as? Overlay.Apps)?.let { overlay = it.copy(index = it.index.coerceIn(0, (visibleApps.size - 1).coerceAtLeast(0))) }
     }
 
@@ -528,6 +602,8 @@ class Controller(private val app: Application) {
             is Overlay.Settings -> overlay = when {
                 o.zip != null -> o.copy(zip = null)
                 o.hiddenIndex != null -> o.copy(hiddenIndex = null)
+                o.cityIndex != null -> o.copy(cityIndex = null)
+                o.widgetsIndex != null -> o.copy(widgetsIndex = null)
                 else -> Overlay.None
             }
             is Overlay.Phone -> closePhone()
@@ -560,11 +636,16 @@ class Controller(private val app: Application) {
                 o.hiddenIndex != null -> if (dy != 0) {
                     overlay = o.copy(hiddenIndex = (o.hiddenIndex + dy).coerceIn(0, (hidden.size - 1).coerceAtLeast(0)))
                 }
+                o.cityIndex != null -> if (dy != 0) overlay = o.copy(cityIndex = (o.cityIndex + dy).coerceIn(0, Cities.size - 1))
+                o.widgetsIndex != null -> if (dy != 0) overlay = o.copy(widgetsIndex = (o.widgetsIndex + dy).coerceIn(0, WIDGET_ROWS - 1))
                 dy != 0 -> {
                     val row = (o.row + dy).coerceIn(0, SETTINGS_ROWS - 1)
                     overlay = o.copy(row = row, col = if (row < WALL_ROWS) wallCol(row, o.col) else o.col)
                 }
                 o.row < WALL_ROWS -> overlay = o.copy(col = wallCol(o.row, o.col + dx))
+                o.row == WALL_ROWS + SettingItem.Face.ordinal -> cycleFace(dx)
+                o.row == WALL_ROWS + SettingItem.Clock.ordinal -> updatePrefs(prefs.copy(use24h = dx > 0))
+                o.row == WALL_ROWS + SettingItem.Layout.ordinal -> updatePrefs(prefs.copy(centered = dx > 0))
             }
             else -> Unit
         }
@@ -574,35 +655,55 @@ class Controller(private val app: Application) {
     private fun wallCol(row: Int, col: Int): Int =
         col.coerceIn(0, minOf(WALL_COLS, Wall.entries.size - row * WALL_COLS) - 1)
 
+    private fun cycleFace(d: Int) {
+        val all = ClockFace.entries
+        updatePrefs(prefs.copy(face = all[(prefs.face.ordinal + d).mod(all.size)]))
+    }
+
+    /** Zones top to bottom, skipping hidden or empty ones. */
+    private fun zones(): List<Zone> = buildList {
+        if (widgets.isNotEmpty()) add(Zone.Widgets)
+        if (showsVisible) add(Zone.Shows)
+        add(Zone.Dock)
+    }
+
     private fun moveHome(dx: Int, dy: Int) {
-        if (zone == Zone.Dock) {
+        if (dy != 0) {
+            val zs = zones()
+            val i = zs.indexOf(zone)
             when {
-                dx != 0 -> dockIndex = (dockIndex + dx).coerceIn(0, dockEntries.size - 1)
-                dy < 0 && showsVisible -> {
-                    zone = Zone.Shows
-                    showIndex = showIndex.coerceIn(0, shows.size)
-                }
-                dy > 0 -> overlay = Overlay.Apps(0)
+                dy > 0 && zone == Zone.Dock -> overlay = Overlay.Apps(0)
+                i + dy in zs.indices -> zone = zs[i + dy]
             }
-        } else {
-            when {
-                dx != 0 -> showIndex = (showIndex + dx).coerceIn(0, shows.size)
-                dy > 0 -> zone = Zone.Dock
-            }
+            clampFocus()
+            return
+        }
+        when (zone) {
+            Zone.Dock -> dockIndex = (dockIndex + dx).mod(dockEntries.size.coerceAtLeast(1))
+            Zone.Shows -> showIndex = (showIndex + dx).coerceIn(0, shows.size)
+            Zone.Widgets -> widgetIndex = (widgetIndex + dx).coerceIn(0, (widgets.size - 1).coerceAtLeast(0))
         }
     }
 
     private fun moveItem(o: Overlay.Move, dx: Int) {
         val target = o.index + dx
-        if (o.zone == Zone.Dock) {
-            if (target !in dock.indices) return
-            saveDock(dock.toMutableList().apply { add(target, removeAt(o.index)) })
-            dockIndex = favIndexToDockIndex(target)
-        } else {
-            if (target !in shows.indices) return
-            shows = shows.toMutableList().apply { add(target, removeAt(o.index)) }
-            store.shows = shows
-            showIndex = target
+        when (o.zone) {
+            Zone.Dock -> {
+                if (target !in dock.indices) return
+                saveDock(dock.toMutableList().apply { add(target, removeAt(o.index)) })
+                dockIndex = favIndexToDockIndex(target)
+            }
+            Zone.Shows -> {
+                if (target !in shows.indices) return
+                shows = shows.toMutableList().apply { add(target, removeAt(o.index)) }
+                store.shows = shows
+                showIndex = target
+            }
+            Zone.Widgets -> {
+                if (target !in widgets.indices) return
+                updatePrefs(prefs.copy(widgets = widgets.toMutableList().apply { add(target, removeAt(o.index)) }))
+                widgetIndex = target
+            }
         }
         overlay = o.copy(index = target)
     }
@@ -615,15 +716,15 @@ class Controller(private val app: Application) {
 
     private fun select() {
         when (val o = overlay) {
-            Overlay.None -> if (zone == Zone.Dock) {
-                when (val e = dockEntries.getOrNull(dockIndex)) {
+            Overlay.None -> when (zone) {
+                Zone.Dock -> when (val e = dockEntries.getOrNull(dockIndex)) {
                     is DockEntry.Fav -> launch(e.app, "dock:$dockIndex")
                     is DockEntry.Recent -> launch(e.app, "dock:$dockIndex")
                     is DockEntry.Shortcut -> runShortcut(e.util)
                     null -> Unit
                 }
-            } else {
-                shows.getOrNull(showIndex)?.let(::openShow) ?: openPhone(PhoneMode.Pin, Overlay.None)
+                Zone.Shows -> shows.getOrNull(showIndex)?.let(::openShow) ?: openPhone(PhoneMode.Pin, Overlay.None)
+                Zone.Widgets -> widgets.getOrNull(widgetIndex)?.let(::selectWidget)
             }
             is Overlay.Apps -> visibleApps.getOrNull(o.index)?.let {
                 launch(it, "grid:${o.index}")
@@ -637,7 +738,64 @@ class Controller(private val app: Application) {
         }
     }
 
+    private fun settingsAt(item: SettingItem) = Overlay.Settings(WALL_ROWS + item.ordinal)
+
+    private fun selectWidget(w: WidgetKind) {
+        when (w) {
+            WidgetKind.Weather, WidgetKind.Sun -> if (place == null) {
+                zipStatus = null
+                overlay = settingsAt(SettingItem.Weather).copy(zip = "")
+            }
+            WidgetKind.NowPlaying -> when {
+                !mediaAccess -> overlay = Overlay.Notice(
+                    "Allow media access",
+                    "Now Playing reads what's playing through notification access. From your computer, run:\n\n" +
+                        "adb shell cmd notification allow_listener ${app.packageName}/${app.packageName}.data.MediaListener",
+                    Overlay.None,
+                )
+                else -> media.toggle()
+            }
+            WidgetKind.Clocks -> overlay = settingsAt(SettingItem.Widgets).copy(
+                widgetsIndex = WIDGET_ROWS - 1,
+                cityIndex = Cities.indexOfFirst { it.name == prefs.cities.firstOrNull() }.coerceAtLeast(0),
+            )
+            WidgetKind.Connections -> when {
+                bt == BtState.NoPermission && !btAsked -> {
+                    btAsked = true
+                    host?.requestPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+                }
+                bt == BtState.NoPermission -> overlay = Overlay.Notice(
+                    "Allow Bluetooth access",
+                    "To list connected devices, Dash needs the Nearby devices permission. From your computer, run:\n\n" +
+                        "adb shell pm grant ${app.packageName} android.permission.BLUETOOTH_CONNECT",
+                    Overlay.None,
+                )
+                else -> openSettings(Settings.ACTION_WIFI_SETTINGS)
+            }
+        }
+    }
+
     private fun selectSetting(o: Overlay.Settings) {
+        if (o.cityIndex != null) {
+            val name = Cities[o.cityIndex].name
+            val cur = prefs.cities
+            when {
+                name in cur -> updatePrefs(prefs.copy(cities = cur - name))
+                cur.size >= MAX_CITIES -> host?.toast("Up to $MAX_CITIES cities — remove one first")
+                // Kept in list order (west to east) rather than pick order.
+                else -> updatePrefs(prefs.copy(cities = Cities.map { it.name }.filter { it in cur || it == name }))
+            }
+            return
+        }
+        if (o.widgetsIndex != null) {
+            val kind = WidgetKind.entries.getOrNull(o.widgetsIndex)
+            if (kind == null) {
+                overlay = o.copy(cityIndex = 0)
+                return
+            }
+            setWidgets(if (kind in widgets) widgets - kind else widgets + kind)
+            return
+        }
         if (o.zip != null) {
             when (o.key) {
                 ZIP_KEY_DELETE -> deleteZip(o)
@@ -664,6 +822,14 @@ class Controller(private val app: Application) {
         }
         when (SettingItem.entries[o.row - WALL_ROWS]) {
             SettingItem.Clock -> updatePrefs(prefs.copy(use24h = !prefs.use24h))
+            SettingItem.Face -> cycleFace(1)
+            SettingItem.ClockWeather -> updatePrefs(prefs.copy(clockWeather = !prefs.clockWeather))
+            SettingItem.Layout -> updatePrefs(prefs.copy(centered = !prefs.centered))
+            SettingItem.Widgets -> overlay = o.copy(widgetsIndex = 0)
+            SettingItem.Bluetooth -> {
+                updatePrefs(prefs.copy(btInDock = !prefs.btInDock))
+                clampFocus()
+            }
             SettingItem.Weather -> {
                 zipStatus = null
                 overlay = o.copy(zip = "", key = 0)
@@ -677,7 +843,7 @@ class Controller(private val app: Application) {
             }
             SettingItem.Shows -> {
                 updatePrefs(prefs.copy(showShows = !prefs.showShows))
-                if (!prefs.showShows) zone = Zone.Dock
+                clampFocus()
             }
             SettingItem.Motion -> updatePrefs(prefs.copy(motion = !prefs.motion))
             SettingItem.Hidden -> if (hidden.isNotEmpty()) overlay = o.copy(hiddenIndex = 0)
@@ -742,6 +908,8 @@ class Controller(private val app: Application) {
             }
             o == Overlay.None && zone == Zone.Shows ->
                 shows.getOrNull(showIndex)?.let { openMenu(MenuTarget.Show(it, "show:$showIndex"), o) }
+            o == Overlay.None && zone == Zone.Widgets ->
+                widgets.getOrNull(widgetIndex)?.let { openMenu(MenuTarget.Widget(it, "widget:$widgetIndex"), o) }
             o is Overlay.Apps -> visibleApps.getOrNull(o.index)?.let { openMenu(MenuTarget.App(it, "grid:${o.index}"), o) }
         }
     }
@@ -759,6 +927,12 @@ class Controller(private val app: Application) {
                 )
             }
             is MenuTarget.Show -> listOfNotNull(Action.MoveShow.takeIf { shows.size > 1 }, Action.RemoveShow)
+            is MenuTarget.Widget -> listOfNotNull(
+                Action.OpenApp.takeIf { t.kind == WidgetKind.NowPlaying && media.pkg != null },
+                Action.BtSettings.takeIf { t.kind == WidgetKind.Connections },
+                Action.MoveWidget.takeIf { widgets.size > 1 },
+                Action.RemoveWidget,
+            )
         }
         overlay = Overlay.Menu(t, actions, 0, under)
     }

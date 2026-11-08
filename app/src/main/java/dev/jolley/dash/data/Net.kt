@@ -19,6 +19,8 @@ import java.net.HttpURLConnection
 import java.net.Inet4Address
 import java.net.URL
 import java.net.URLEncoder
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -56,20 +58,76 @@ object WeatherApi {
     fun forecast(p: Place): Weather {
         val body = http(
             "https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}" +
-                "&current=temperature_2m,weather_code,is_day&daily=temperature_2m_max,temperature_2m_min" +
-                "&temperature_unit=fahrenheit&timezone=auto&forecast_days=1",
+                "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day" +
+                "&hourly=temperature_2m,weather_code,precipitation_probability,is_day" +
+                "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset,uv_index_max" +
+                "&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=6",
         ) { it.bufferedReader().readText() }
         val j = JSONObject(body)
+        // Open-Meteo returns local wall-clock times plus the offset, not epoch seconds.
+        val off = ZoneOffset.ofTotalSeconds(j.optInt("utc_offset_seconds"))
+        fun epoch(s: String) = LocalDateTime.parse(s).toEpochSecond(off)
         val cur = j.getJSONObject("current")
         val daily = j.getJSONObject("daily")
+        val hourly = j.getJSONObject("hourly")
+        val now = epoch(cur.getString("time")) / 3600 * 3600
+        val ht = hourly.getJSONArray("time")
+        val hours = (0 until ht.length()).mapNotNull { i ->
+            val at = epoch(ht.getString(i))
+            if (at < now) return@mapNotNull null
+            Hour(
+                at = at,
+                code = hourly.getJSONArray("weather_code").optInt(i),
+                temp = hourly.getJSONArray("temperature_2m").optDouble(i).roundToInt(),
+                pop = hourly.getJSONArray("precipitation_probability").optInt(i, 0),
+                isDay = hourly.getJSONArray("is_day").optInt(i, 1) == 1,
+            )
+        }.take(30)
+        val dt = daily.getJSONArray("time")
+        val days = (0 until dt.length()).map { i ->
+            Day(
+                date = dt.getString(i),
+                code = daily.getJSONArray("weather_code").optInt(i),
+                hi = daily.getJSONArray("temperature_2m_max").optDouble(i).roundToInt(),
+                lo = daily.getJSONArray("temperature_2m_min").optDouble(i).roundToInt(),
+            )
+        }
+        val temp = cur.getDouble("temperature_2m").roundToInt()
         return Weather(
-            temp = cur.getDouble("temperature_2m").roundToInt(),
+            temp = temp,
             code = cur.getInt("weather_code"),
             isDay = cur.optInt("is_day", 1) == 1,
-            hi = daily.getJSONArray("temperature_2m_max").getDouble(0).roundToInt(),
-            lo = daily.getJSONArray("temperature_2m_min").getDouble(0).roundToInt(),
+            hi = days.firstOrNull()?.hi ?: temp,
+            lo = days.firstOrNull()?.lo ?: temp,
             fetchedAt = System.currentTimeMillis(),
+            feels = cur.optDouble("apparent_temperature", temp.toDouble()).roundToInt(),
+            humidity = cur.optInt("relative_humidity_2m", -1),
+            wind = cur.optDouble("wind_speed_10m", -1.0).roundToInt(),
+            uv = daily.optJSONArray("uv_index_max")?.optDouble(0, -1.0)?.roundToInt() ?: -1,
+            sunrise = daily.optJSONArray("sunrise")?.optString(0)?.ifBlank { null }?.let(::epoch) ?: 0,
+            sunset = daily.optJSONArray("sunset")?.optString(0)?.ifBlank { null }?.let(::epoch) ?: 0,
+            hours = hours,
+            days = days,
+            aqi = runCatching { airQuality(p) }.getOrNull(),
         )
+    }
+
+    private fun airQuality(p: Place): Int? {
+        val body = http(
+            "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${p.lat}&longitude=${p.lon}&current=us_aqi",
+        ) { it.bufferedReader().readText() }
+        val v = JSONObject(body).getJSONObject("current").optDouble("us_aqi")
+        return if (v.isNaN()) null else v.roundToInt()
+    }
+
+    /** US EPA categories. */
+    fun aqiLabel(aqi: Int): String = when {
+        aqi <= 50 -> "Good"
+        aqi <= 100 -> "Moderate"
+        aqi <= 150 -> "Unhealthy for some"
+        aqi <= 200 -> "Unhealthy"
+        aqi <= 300 -> "Very unhealthy"
+        else -> "Hazardous"
     }
 
     /** WMO weather interpretation codes, as used by Open-Meteo. */

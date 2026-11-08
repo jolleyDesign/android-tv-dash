@@ -45,7 +45,7 @@ object C {
 val Ease = CubicBezierEasing(.2f, .8f, .2f, 1f)
 
 val Geist = FontFamily(
-    listOf(300, 400, 500, 600).map { w ->
+    listOf(300, 400, 500, 600, 700, 800).map { w ->
         Font(R.font.geist, FontWeight(w), variationSettings = FontVariation.Settings(FontVariation.weight(w)))
     },
 )
@@ -63,9 +63,11 @@ val Eyebrow = type(22, 500, C.Muted)
 
 // Soft halo so text stays legible over bright photo wallpapers; barely visible on dark ones.
 val WallShadow = androidx.compose.ui.graphics.Shadow(Color(0x99000000), Offset(0f, 2f), 18f)
+// Small text needs a tight, dark shadow; a wide soft halo barely separates it from a bright photo.
+val WallShadowTight = androidx.compose.ui.graphics.Shadow(Color(0xE6000000), Offset(0f, 1.5f), 6f)
 
 fun wall(size: Int, weight: Int = 400, color: Color = C.Text, tracking: Float = 0f, lineHeight: Int? = null) =
-    type(size, weight, color, tracking, lineHeight).copy(shadow = WallShadow)
+    type(size, weight, color, tracking, lineHeight).copy(shadow = if (size <= 40) WallShadowTight else WallShadow)
 
 /** Focus ring drawn outside the element so it never shifts layout; breathes while the user is active. */
 @Composable
@@ -149,6 +151,82 @@ object Ic {
         lucide(
             "image-plus", "M16 5h6", "M19 2v6", "M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5",
             "m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21", "M11 9a2 2 0 1 1-4 0 2 2 0 0 1 4 0",
+        )
+    }
+
+    val Bluetooth by lazy { lucide("bluetooth", "m7 7 10 10-5 5V2l5 5L7 17") }
+    val Play by lazy { lucide("play", "M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z") }
+    val Pause by lazy {
+        lucide(
+            "pause", "M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z",
+            "M6 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z",
+        )
+    }
+    val Music by lazy { lucide("music", "M9 18V5l12-2v13", "M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0", "M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0") }
+    val Headphones by lazy {
+        lucide("headphones", "M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3")
+    }
+    val Gamepad by lazy {
+        lucide(
+            "gamepad-2", "M6 11h4", "M8 9v4", "M15 12h.01", "M18 10h.01",
+            "M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z",
+        )
+    }
+    val Keyboard by lazy {
+        lucide(
+            "keyboard", "M4 6h16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z",
+            "M6 10h.01", "M10 10h.01", "M14 10h.01", "M18 10h.01", "M8 14h8",
+        )
+    }
+    val Remote by lazy {
+        lucide(
+            "remote", "M9.5 2h5a2.5 2.5 0 0 1 2.5 2.5v15a2.5 2.5 0 0 1-2.5 2.5h-5A2.5 2.5 0 0 1 7 19.5v-15A2.5 2.5 0 0 1 9.5 2z",
+            "M14 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0", "M12 14h.01", "M12 18h.01",
+        )
+    }
+    val Speaker by lazy {
+        lucide(
+            "speaker", "M6 2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z", "M12 6h.01",
+            "M16 14a4 4 0 1 1-8 0 4 4 0 0 1 8 0", "M12 14h.01",
+        )
+    }
+    val Sunrise by lazy {
+        lucide(
+            "sunrise", "M12 2v8", "m4.93 10.93 1.41 1.41", "M2 18h2", "M20 18h2", "m19.07 10.93-1.41 1.41", "M22 22H2",
+            "m8 6 4-4 4 4", "M16 18a4 4 0 0 0-8 0",
+        )
+    }
+    val Sunset by lazy {
+        lucide(
+            "sunset", "M12 10V2", "m4.93 10.93 1.41 1.41", "M2 18h2", "M20 18h2", "m19.07 10.93-1.41 1.41", "M22 22H2",
+            "m16 6-4 4-4-4", "M16 18a4 4 0 0 0-8 0",
+        )
+    }
+    val Wind by lazy { lucide("wind", "M12.8 19.6A2 2 0 1 0 14 16H2", "M17.5 8a2.5 2.5 0 1 1 2 4H2", "M9.8 4.4A2 2 0 1 1 11 8H2") }
+    val Droplet by lazy {
+        lucide("droplet", "M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z")
+    }
+    val Thermometer by lazy { lucide("thermometer", "M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z") }
+    val Globe by lazy {
+        lucide("globe", "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0", "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", "M2 12h20")
+    }
+    val Network by lazy {
+        lucide(
+            "network", "M10 2h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z",
+            "M4 16h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z",
+            "M16 16h4a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1z", "M6 16v-3h12v3", "M12 8v5",
+        )
+    }
+    val WifiOff by lazy {
+        lucide(
+            "wifi-off", "M12 20h.01", "M8.5 16.429a5 5 0 0 1 7 0", "M5 12.859a10 10 0 0 1 5.17-2.69",
+            "M19 12.859a10 10 0 0 0-2.007-1.523", "M2 8.82a15 15 0 0 1 4.177-2.643", "M22 8.82a15 15 0 0 0-11.288-3.764", "m2 2 20 20",
+        )
+    }
+    val Leaf by lazy {
+        lucide(
+            "leaf", "M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z",
+            "M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12",
         )
     }
 

@@ -31,6 +31,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -42,6 +44,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -58,6 +61,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.jolley.dash.Action
 import dev.jolley.dash.Controller
@@ -70,7 +74,12 @@ import dev.jolley.dash.WALL_COLS
 import dev.jolley.dash.WALL_ROWS
 import dev.jolley.dash.ZIP_KEY_DELETE
 import dev.jolley.dash.ZIP_KEY_DONE
+import dev.jolley.dash.data.Cities
+import dev.jolley.dash.data.MAX_CITIES
 import dev.jolley.dash.data.Wall
+import dev.jolley.dash.data.WidgetKind
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import io.nayuki.qrcodegen.QrCode
 import kotlin.math.roundToInt
 
@@ -170,7 +179,10 @@ private fun Action.icon(): ImageVector = when (this) {
     Action.RemoveFromDock -> Ic.Minus
     Action.Hide -> Ic.EyeOff
     Action.Info -> Ic.Info
-    Action.RemoveShow -> Ic.Trash
+    Action.RemoveShow, Action.RemoveWidget -> Ic.Trash
+    Action.MoveWidget -> Ic.ArrowsLR
+    Action.OpenApp -> Ic.Play
+    Action.BtSettings -> Ic.Bluetooth
 }
 
 @Composable
@@ -186,6 +198,7 @@ fun MenuLayer(c: Controller) {
         val key = when (val t = m.target) {
             is MenuTarget.App -> t.anchorKey
             is MenuTarget.Show -> t.anchorKey
+            is MenuTarget.Widget -> t.anchorKey
         }
         val anchor = c.bounds[key]
         Box(Modifier.fillMaxSize()) {
@@ -225,7 +238,7 @@ fun MenuLayer(c: Controller) {
                     ) {
                         Glyph(a.icon(), 24.dp, if (sel) C.OnAccent else C.Muted)
                         BasicText(a.label, Modifier.weight(1f), style = type(22, 500, if (sel) C.OnAccent else C.Text))
-                        if (a == Action.Move || a == Action.MoveShow) {
+                        if (a == Action.Move || a == Action.MoveShow || a == Action.MoveWidget) {
                             BasicText("◀ ▶", style = type(16, color = if (sel) C.OnAccent.copy(alpha = .7f) else C.Muted))
                         }
                     }
@@ -251,21 +264,36 @@ fun SettingsPanel(c: Controller) {
     ) {
         val st = s ?: last ?: return@AnimatedVisibility
         val active = o is Overlay.Settings
+        val page = when {
+            st.zip != null -> 1
+            st.hiddenIndex != null -> 2
+            st.cityIndex != null -> 4
+            st.widgetsIndex != null -> 3
+            else -> 0
+        }
         Box(Modifier.fillMaxSize()) {
-            Column(
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .width(680.dp)
-                    .fillMaxHeight()
-                    .background(Color(0xF0141311))
-                    .drawBehind { drawLine(Color.White.copy(alpha = .06f), Offset.Zero, Offset(0f, size.height), 1.dp.toPx()) }
-                    .padding(horizontal = 48.dp, vertical = 72.dp),
-                verticalArrangement = Arrangement.spacedBy(36.dp),
-            ) {
-                when {
-                    st.zip != null -> ZipEntry(c, st.zip, st.key, active)
-                    st.hiddenIndex != null -> HiddenApps(c, st.hiddenIndex, active)
-                    else -> SettingsRows(c, st, active)
+            // Keyed by page so each page opens scrolled to the top.
+            key(page) {
+                val scroll = rememberScrollState()
+                if (page == 0) LaunchedEffect(st.row == 0) { if (st.row == 0) scroll.animateScrollTo(0) }
+                Column(
+                    Modifier
+                        .align(Alignment.CenterEnd)
+                        .width(680.dp)
+                        .fillMaxHeight()
+                        .background(Color(0xF0141311))
+                        .drawBehind { drawLine(Color.White.copy(alpha = .06f), Offset.Zero, Offset(0f, size.height), 1.dp.toPx()) }
+                        .verticalScroll(scroll)
+                        .padding(horizontal = 48.dp, vertical = 72.dp),
+                    verticalArrangement = Arrangement.spacedBy(36.dp),
+                ) {
+                    when (page) {
+                        1 -> ZipEntry(c, st.zip!!, st.key, active)
+                        2 -> HiddenApps(c, st.hiddenIndex!!, active)
+                        3 -> WidgetsPage(c, st.widgetsIndex!!, active)
+                        4 -> CitiesPage(c, st.cityIndex!!, active)
+                        else -> SettingsRows(c, st, active)
+                    }
                 }
             }
         }
@@ -292,13 +320,20 @@ private fun SettingsRows(c: Controller, st: Overlay.Settings, active: Boolean) {
         val p = c.prefs
         fun on(item: SettingItem) = active && st.row == WALL_ROWS + item.ordinal
         SettingRow("Clock", on(SettingItem.Clock)) { Segmented(listOf("12h", "24h"), if (p.use24h) 1 else 0) }
+        SettingRow("Clock face", on(SettingItem.Face)) { Stepper(p.face.label, on(SettingItem.Face)) }
+        SettingRow("Weather by clock", on(SettingItem.ClockWeather)) { Toggle(p.clockWeather) }
+        SettingRow("Layout", on(SettingItem.Layout)) { Segmented(listOf("Left", "Centered"), if (p.centered) 1 else 0) }
         SettingRow("Weather", on(SettingItem.Weather)) {
             Value((c.place?.name ?: "Set ZIP code") + " · °F  ›")
+        }
+        SettingRow("Widgets", on(SettingItem.Widgets)) {
+            Value((if (p.widgets.isEmpty()) "Off" else "${p.widgets.size} on") + "  ›")
         }
         SettingRow("Recent apps in dock", on(SettingItem.Recents)) {
             if (c.usageAccess) Toggle(p.showRecents) else Value("Needs access  ›")
         }
         SettingRow("Pinned shows row", on(SettingItem.Shows)) { Toggle(p.showShows) }
+        SettingRow("Bluetooth in dock", on(SettingItem.Bluetooth)) { Toggle(p.btInDock) }
         SettingRow("Ambient motion", on(SettingItem.Motion)) { Toggle(p.motion) }
         SettingRow("Hidden apps", on(SettingItem.Hidden)) { Value("${c.hiddenApps().size}  ›") }
         SettingRow("Android settings", on(SettingItem.Android)) { Value("›") }
@@ -345,8 +380,11 @@ private fun Swatch(c: Controller, w: Wall, focused: Boolean, selected: Boolean) 
 @Composable
 private fun SettingRow(label: String, focused: Boolean, value: @Composable () -> Unit) {
     val f by focusAnim(focused)
+    val bring = remember { BringIntoViewRequester() }
+    LaunchedEffect(focused) { if (focused) bring.bringIntoView() }
     Row(
         Modifier
+            .bringIntoViewRequester(bring)
             .fillMaxWidth()
             .drawBehind {
                 if (f > 0f) drawRoundRect(Color.White.copy(alpha = .08f * f), cornerRadius = CornerRadius(14.dp.toPx()))
@@ -362,6 +400,57 @@ private fun SettingRow(label: String, focused: Boolean, value: @Composable () ->
 
 @Composable
 private fun Value(text: String) = BasicText(text, style = type(22, color = C.Muted))
+
+/** A value changed with ◀ ▶ (OK also steps forward). Arrows only show while focused. */
+@Composable
+private fun Stepper(text: String, focused: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Glyph(Ic.ChevronLeft, 24.dp, if (focused) C.Muted else Color.Transparent)
+        BasicText(text, Modifier.width(110.dp), style = type(22, 500).copy(textAlign = TextAlign.Center))
+        Glyph(Ic.ChevronRight, 24.dp, if (focused) C.Muted else Color.Transparent)
+    }
+}
+
+@Composable
+private fun PageTitle(title: String, sub: String) {
+    Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        BasicText(title, style = type(48, 600, tracking = -1.4f))
+        BasicText(sub, style = type(22, color = C.Muted, lineHeight = 30))
+    }
+}
+
+@Composable
+private fun WidgetsPage(c: Controller, index: Int, active: Boolean) {
+    PageTitle("Widgets", "Shown above your pinned shows. Hold OK on a widget to move or remove it.")
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        WidgetKind.entries.forEachIndexed { i, k ->
+            SettingRow(k.label, active && index == i) { Toggle(k in c.widgets) }
+        }
+    }
+    Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = .08f)))
+    SettingRow("World clock cities", active && index == WidgetKind.entries.size) {
+        Value(c.prefs.cities.ifEmpty { listOf("None") }.joinToString(", ") + "  ›")
+    }
+}
+
+@Composable
+private fun CitiesPage(c: Controller, index: Int, active: Boolean) {
+    PageTitle("World clocks", "Pick up to $MAX_CITIES cities.")
+    val now = rememberNow()
+    val fmt = remember(c.prefs.use24h) { DateTimeFormatter.ofPattern(if (c.prefs.use24h) "H:mm" else "h:mm a") }
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Cities.forEachIndexed { i, city ->
+            val on = city.name in c.prefs.cities
+            SettingRow(city.name, active && index == i) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    val t = now.atZone(ZoneId.systemDefault()).withZoneSameInstant(ZoneId.of(city.zone))
+                    BasicText(t.format(fmt), style = type(20, color = C.Muted))
+                    Glyph(Ic.Check, 26.dp, if (on) C.Accent else Color.Transparent)
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun Toggle(on: Boolean) {
